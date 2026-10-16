@@ -330,7 +330,7 @@ local function syncEvadePhysics()
     if root then
         pcall(function()
             local frictionVal = math.clamp(State.Friction / 10, 0.0, 5)
-            root.CustomPhysicalProperties = PhysicalProperties.new(0.7, frictionVal, 0.5, 1, 1)
+            root.CustomPhysicalProperties = PhysicalProperties.new(0.7, frictionVal, 0, 1, 0)
         end)
     end
     
@@ -361,6 +361,15 @@ table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
     local hum = getHumanoid()
     local root = getRoot()
     if not hum or hum.Health <= 0 or not root then return end
+    
+    -- Universal Anti-Super-Jump Cap: prevents launching into the sky on ANY jump (normal or bhop)
+    if root.AssemblyLinearVelocity.Y > 38 then
+        root.AssemblyLinearVelocity = Vector3.new(
+            root.AssemblyLinearVelocity.X,
+            38,
+            root.AssemblyLinearVelocity.Z
+        )
+    end
     
     -- If Speed is set to 0, stop movement completely
     if State.Speed <= 0 then
