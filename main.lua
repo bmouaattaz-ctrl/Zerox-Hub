@@ -50,7 +50,7 @@ local function getSafeParent()
     if okCore then
         return CoreGui
     end
-    return LocalPlayer:WaitForChild("PlayerGui")
+    return LocalPlayer:FindFirstChildOfClass("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
 end
 
 local ParentContainer = getSafeParent()
@@ -239,7 +239,7 @@ local EvadeTables = {}
 local function scanForEvadeTables()
     local found = {}
     
-    -- Method 1: getgc inspection (Standard across executors)
+    -- Safe getgc memory scan (Instant, zero yields, zero module execution)
     if getgc then
         pcall(function()
             local gc = getgc(true)
@@ -254,47 +254,6 @@ local function scanForEvadeTables()
                 end
             end
         end)
-    end
-    
-    -- Method 2: Loaded module search
-    if getloadedmodules then
-        pcall(function()
-            for _, m in ipairs(getloadedmodules()) do
-                pcall(function()
-                    local t = require(m)
-                    if type(t) == "table" then
-                        if (rawget(t, "Speed") and rawget(t, "Friction")) or rawget(t, "RunAccel") or rawget(t, "SprintCap") then
-                            table.insert(found, t)
-                        end
-                    end
-                end)
-            end
-        end)
-    end
-    
-    -- Method 3: Search PlayerScripts, Character, and ReplicatedStorage
-    local searchRoots = {
-        LocalPlayer:FindFirstChild("PlayerScripts"),
-        LocalPlayer.Character,
-        game:GetService("ReplicatedStorage")
-    }
-    for _, rootObj in ipairs(searchRoots) do
-        if rootObj then
-            pcall(function()
-                for _, desc in ipairs(rootObj:GetDescendants()) do
-                    if desc:IsA("ModuleScript") then
-                        pcall(function()
-                            local t = require(desc)
-                            if type(t) == "table" then
-                                if (rawget(t, "Speed") and rawget(t, "Friction")) or rawget(t, "RunAccel") or rawget(t, "SprintCap") then
-                                    table.insert(found, t)
-                                end
-                            end
-                        end)
-                    end
-                end
-            end)
-        end
     end
     
     return found
@@ -356,9 +315,11 @@ local function applyToEvadeTables()
     end
 end
 
--- Initialize scan immediately
-EvadeTables = scanForEvadeTables()
-applyToEvadeTables()
+-- Asynchronous non-blocking initialization
+task.spawn(function()
+    EvadeTables = scanForEvadeTables()
+    applyToEvadeTables()
+end)
 
 local function syncEvadePhysics()
     local root = getRoot()
