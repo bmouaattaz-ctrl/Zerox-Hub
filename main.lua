@@ -361,11 +361,11 @@ table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
     local root = getRoot()
     if not hum or hum.Health <= 0 or not root then return end
     
-    -- Enforce strictly normal jump height during Bhop (Stop super jump completely)
-    if State.Bhop and root.AssemblyLinearVelocity.Y > 22 then
+    -- Enforce strictly normal jump height during Bhop (Prevent super jump while keeping natural jump height)
+    if State.Bhop and root.AssemblyLinearVelocity.Y > 52 then
         root.AssemblyLinearVelocity = Vector3.new(
             root.AssemblyLinearVelocity.X,
-            20,
+            50,
             root.AssemblyLinearVelocity.Z
         )
     end
@@ -418,13 +418,13 @@ table.insert(ActiveConnections, LocalPlayer.CharacterAdded:Connect(function(char
     if State.MuteWind then scanAllSounds() end
 end))
 
--- Natural Bunny Hop Engine (Strict Ground Detection - Zero Air-Walk - Zero Super Jump)
+-- Natural Bunny Hop Engine (Strict Ground Detection - Natural Jump Rhythm)
 local lastBhopTick = 0
 local function isStrictlyGrounded(root, hum)
     if not hum or not root then return false end
     
     -- If traveling upwards in the air, player cannot be grounded
-    if root.AssemblyLinearVelocity.Y > 0.5 then
+    if root.AssemblyLinearVelocity.Y > 0.1 then
         return false
     end
     
@@ -459,11 +459,10 @@ table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
         local hum = getHumanoid()
         local root = getRoot()
         if hum and hum.Health > 0 and root then
-            if (tick() - lastBhopTick > 0.22) and isStrictlyGrounded(root, hum) then
+            if (tick() - lastBhopTick > 0.38) and isStrictlyGrounded(root, hum) then
                 lastBhopTick = tick()
                 hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
-                hum.Jump = true
             end
         end
     end
