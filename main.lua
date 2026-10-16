@@ -680,7 +680,9 @@ SearchInput.ClearTextOnFocus = false
 SearchInput.Parent = SearchFrame
 
 -- Close Button (Kills Hub)
+-- Close Button (Kills Hub)
 local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
 CloseBtn.Size = UDim2.new(0, 26, 0, 26)
 CloseBtn.Position = UDim2.new(1, -34, 0, 9)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(24, 24, 30)
@@ -688,6 +690,9 @@ CloseBtn.Text = "×"
 CloseBtn.Font = Enum.Font.GothamBold
 CloseBtn.TextSize = 16
 CloseBtn.TextColor3 = Color3.fromRGB(180, 180, 190)
+CloseBtn.ZIndex = 25
+CloseBtn.Active = true
+CloseBtn.AutoButtonColor = false
 CloseBtn.Parent = Topbar
 
 local CBCorner = Instance.new("UICorner")
@@ -708,6 +713,15 @@ local dragStart, startPos, dragInput
 
 Topbar.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        -- Don't start dragging if clicking CloseBtn
+        local mousePos = input.Position
+        local cbPos = CloseBtn.AbsolutePosition
+        local cbSize = CloseBtn.AbsoluteSize
+        if mousePos.X >= cbPos.X and mousePos.X <= (cbPos.X + cbSize.X) and
+           mousePos.Y >= cbPos.Y and mousePos.Y <= (cbPos.Y + cbSize.Y) then
+            return
+        end
+        
         isDragging = true
         dragStart = input.Position
         startPos = Backdrop.Position
@@ -1219,37 +1233,96 @@ local UBCorner = Instance.new("UICorner")
 UBCorner.CornerRadius = UDim.new(0, 6)
 UBCorner.Parent = UnloadBtn
 
--- Total Kill / Exit Function
+-- Total Kill / Exit Function (Immediate Destruction & Total Deactivation)
 local function killHub()
+    -- 1. Disable all state flags
     State.Bhop = false
     State.MuteWind = false
     State.SpeedEnabled = false
-    applyRemoveDarkness(false)
-    applyUnlockZoom(false)
+    State.Speed = 0
+    State.JumpHeight = 1
     
+    -- 2. Restore Visuals
+    pcall(function() applyRemoveDarkness(false) end)
+    pcall(function() applyUnlockZoom(false) end)
+    
+    -- 3. Reset Evade memory tables to factory defaults
+    for _, tbl in ipairs(EvadeTables) do
+        pcall(function()
+            if rawget(tbl, "Speed") ~= nil then tbl.Speed = 1500 end
+            if rawget(tbl, "speed") ~= nil then tbl.speed = 1500 end
+            if rawget(tbl, "Friction") ~= nil then tbl.Friction = 5 end
+            if rawget(tbl, "friction") ~= nil then tbl.friction = 5 end
+            if rawget(tbl, "RunAccel") ~= nil then tbl.RunAccel = 1 end
+            if rawget(tbl, "RunDeaccel") ~= nil then tbl.RunDeaccel = 700 end
+            if rawget(tbl, "RunDeccel") ~= nil then tbl.RunDeccel = 700 end
+            if rawget(tbl, "SprintAccel") ~= nil then tbl.SprintAccel = 1 end
+            if rawget(tbl, "SprintCap") ~= nil then tbl.SprintCap = 2 end
+            if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = 1 end
+            if rawget(tbl, "JumpCap") ~= nil then tbl.JumpCap = 1 end
+            if rawget(tbl, "JumpSpeedMultiplier") ~= nil then tbl.JumpSpeedMultiplier = 1 end
+        end)
+    end
+    table.clear(EvadeTables)
+    
+    -- 4. Reset Character physics & humanoid
     local hum = getHumanoid()
-    if hum then hum.WalkSpeed = State.DefaultSpeed end
+    if hum then
+        pcall(function()
+            hum.WalkSpeed = State.DefaultSpeed or 16
+            hum.JumpHeight = 7.2
+            hum.JumpPower = 50
+        end)
+    end
     
+    local root = getRoot()
+    if root then
+        pcall(function()
+            root.CustomPhysicalProperties = nil
+        end)
+    end
+    
+    -- 5. Restore sounds volume
+    pcall(function()
+        for _, s in ipairs(SoundService:GetDescendants()) do
+            if s:IsA("Sound") and s.Volume == 0 then
+                s.Volume = 0.5
+            end
+        end
+    end)
+    
+    -- 6. Disconnect all runtime loops
     for _, conn in ipairs(ActiveConnections) do
         pcall(function() conn:Disconnect() end)
     end
     table.clear(ActiveConnections)
     
+    -- 7. Destroy GUI immediately
     pcall(function()
-        local tw = TweenService:Create(Backdrop, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 0, 0, 0),
-            Position = UDim2.new(0.5, 0, 0.5, 0)
-        })
-        tw:Play()
-        tw.Completed:Connect(function() pcall(function() ScreenGui:Destroy() end) end)
+        Backdrop.Visible = false
+        ScreenGui.Enabled = false
+        ScreenGui:Destroy()
+    end)
+    pcall(function()
+        if ParentContainer and ParentContainer:FindFirstChild("ZeroxHubGui") then
+            ParentContainer.ZeroxHubGui:Destroy()
+        end
     end)
     
-    task.delay(0.25, function() pcall(function() ScreenGui:Destroy() end) end)
-    print("[Zerox Hub] Unloaded.")
+    print("[Zerox Hub] Total Kill Executed. Everything deactivated & unloaded.")
 end
 
+-- Connect across multiple events so it never fails to trigger
 CloseBtn.MouseButton1Click:Connect(killHub)
+CloseBtn.Activated:Connect(killHub)
+CloseBtn.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+        killHub()
+    end
+end)
+
 UnloadBtn.MouseButton1Click:Connect(killHub)
+UnloadBtn.Activated:Connect(killHub)
 
 -- Home & Credits Info
 local WelcomeCard = Instance.new("Frame")
