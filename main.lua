@@ -300,18 +300,19 @@ local function applyToEvadeTables()
             if rawget(tbl, "sprintCap") ~= nil then tbl.sprintCap = State.SprintCap end
             if rawget(tbl, "SprintSpeedCap") ~= nil then tbl.SprintSpeedCap = State.SprintCap end
             
-            -- Jump Height (Strictly keep 1 for normal jump unless user explicitly sets higher)
-            local jH = (State.JumpHeight and State.JumpHeight > 1) and State.JumpHeight or 1
-            if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = jH end
-            if rawget(tbl, "jumpHeight") ~= nil then tbl.jumpHeight = jH end
-            
-            -- Jump Cap
-            if rawget(tbl, "JumpCap") ~= nil then tbl.JumpCap = State.JumpCap end
-            if rawget(tbl, "jumpCap") ~= nil then tbl.jumpCap = State.JumpCap end
-            
-            -- Jump Speed Multiplier
-            if rawget(tbl, "JumpSpeedMultiplier") ~= nil then tbl.JumpSpeedMultiplier = State.JumpSpeedMultiplier end
-            if rawget(tbl, "jumpSpeedMultiplier") ~= nil then tbl.jumpSpeedMultiplier = State.JumpSpeedMultiplier end
+            -- Jump parameters (Preserve Evade native jump unless explicitly changed)
+            if State.JumpHeight and State.JumpHeight > 1 then
+                if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = State.JumpHeight end
+                if rawget(tbl, "jumpHeight") ~= nil then tbl.jumpHeight = State.JumpHeight end
+            end
+            if State.JumpCap and State.JumpCap > 1 then
+                if rawget(tbl, "JumpCap") ~= nil then tbl.JumpCap = State.JumpCap end
+                if rawget(tbl, "jumpCap") ~= nil then tbl.jumpCap = State.JumpCap end
+            end
+            if State.JumpSpeedMultiplier and State.JumpSpeedMultiplier > 1 then
+                if rawget(tbl, "JumpSpeedMultiplier") ~= nil then tbl.JumpSpeedMultiplier = State.JumpSpeedMultiplier end
+                if rawget(tbl, "jumpSpeedMultiplier") ~= nil then tbl.jumpSpeedMultiplier = State.JumpSpeedMultiplier end
+            end
         end)
     end
 end
@@ -361,15 +362,6 @@ table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
     local root = getRoot()
     if not hum or hum.Health <= 0 or not root then return end
     
-    -- Enforce strictly normal jump height during Bhop (Prevent super jump while keeping natural jump height)
-    if State.Bhop and root.AssemblyLinearVelocity.Y > 52 then
-        root.AssemblyLinearVelocity = Vector3.new(
-            root.AssemblyLinearVelocity.X,
-            50,
-            root.AssemblyLinearVelocity.Z
-        )
-    end
-    
     -- If Speed is set to 0, stop movement completely
     if State.Speed <= 0 then
         simulatedSpeed = 0
@@ -418,39 +410,19 @@ table.insert(ActiveConnections, LocalPlayer.CharacterAdded:Connect(function(char
     if State.MuteWind then scanAllSounds() end
 end))
 
--- Natural Bunny Hop Engine (Strict Ground Detection - Natural Jump Rhythm)
+-- Natural Bunny Hop Engine (100% Normal Jump - Zero Super Jump)
 local lastBhopTick = 0
-local function isStrictlyGrounded(root, hum)
-    if not hum or not root then return false end
-    
-    -- If traveling upwards in the air, player cannot be grounded
-    if root.AssemblyLinearVelocity.Y > 0.1 then
-        return false
-    end
-    
-    local state = hum:GetState()
-    if state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping then
-        return false
-    end
-    
-    if hum.FloorMaterial ~= Enum.Material.Air then
+local function isGrounded(root, hum)
+    if hum and hum.FloorMaterial ~= Enum.Material.Air then
         return true
     end
-    
-    local hip = (hum.HipHeight and hum.HipHeight > 0) and hum.HipHeight or 2.0
-    local rootHalf = (root.Size and root.Size.Y > 0) and (root.Size.Y / 2) or 1.0
-    local soleDistance = hip + rootHalf + 0.35
-    
-    local params = RaycastParams.new()
-    params.FilterType = RaycastFilterType.Exclude
-    params.FilterDescendantsInstances = {getChar(), workspace.CurrentCamera}
-    params.IgnoreWater = true
-    
-    local res = workspace:Raycast(root.Position, Vector3.new(0, -soleDistance, 0), params)
-    if res and res.Instance and res.Instance.CanCollide and res.Instance.Transparency < 0.8 then
-        return true
+    -- Only detect ground when stationary or falling (never while ascending)
+    if root and root.AssemblyLinearVelocity.Y <= 0.5 then
+        local char = getChar()
+        local ray = Ray.new(root.Position, Vector3.new(0, -3.4, 0))
+        local hit = workspace:FindPartOnRayWithIgnoreList(ray, {char})
+        return hit ~= nil
     end
-    
     return false
 end
 
@@ -459,10 +431,11 @@ table.insert(ActiveConnections, RunService.RenderStepped:Connect(function()
         local hum = getHumanoid()
         local root = getRoot()
         if hum and hum.Health > 0 and root then
-            if (tick() - lastBhopTick > 0.38) and isStrictlyGrounded(root, hum) then
+            if (tick() - lastBhopTick > 0.25) and isGrounded(root, hum) then
                 lastBhopTick = tick()
                 hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
+                hum.Jump = true
             end
         end
     end
