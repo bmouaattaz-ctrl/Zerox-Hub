@@ -142,7 +142,7 @@ local State = {
     RunDeaccel = 700,
     SprintAccel = 1,
     SprintCap = 2,
-    JumpHeight = 1,
+    JumpHeight = 1.2,
     JumpCap = 1,
     JumpSpeedMultiplier = 1,
     
@@ -362,11 +362,12 @@ table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
     local root = getRoot()
     if not hum or hum.Health <= 0 or not root then return end
     
-    -- Universal Anti-Super-Jump Cap: prevents launching into the sky on ANY jump (normal or bhop)
-    if root.AssemblyLinearVelocity.Y > 38 then
+    -- Anti-Launch Safety Cap: Allows natural ramp surf & punchy jumps up to 65 velocity,
+    -- while strictly preventing extreme 100+ sky glitches
+    if root.AssemblyLinearVelocity.Y > 65 then
         root.AssemblyLinearVelocity = Vector3.new(
             root.AssemblyLinearVelocity.X,
-            38,
+            65,
             root.AssemblyLinearVelocity.Z
         )
     end
@@ -425,10 +426,10 @@ local function isGrounded(root, hum)
     if hum and hum.FloorMaterial ~= Enum.Material.Air then
         return true
     end
-    -- Only detect ground when stationary or falling (never while ascending)
-    if root and root.AssemblyLinearVelocity.Y <= 0.5 then
+    -- Detect ground/slopes when descending or climbing ramps
+    if root and root.AssemblyLinearVelocity.Y <= 1.0 then
         local char = getChar()
-        local ray = Ray.new(root.Position, Vector3.new(0, -3.4, 0))
+        local ray = Ray.new(root.Position, Vector3.new(0, -3.8, 0))
         local hit = workspace:FindPartOnRayWithIgnoreList(ray, {char})
         return hit ~= nil
     end
@@ -1024,18 +1025,12 @@ end)
 -- 10. CREATING PAGES & CONTROLS (Exact Match to Screenshot)
 -- ========================================================
 
--- TABS
-local HomePage, activateHome = createTab("Home", 1)
-local MainPage, activateMain = createTab("Main", 2)
-local MiscPage, activateMisc = createTab("Miscellaneous", 3)
-local MovPage, activateMov = createTab("Movements", 4)
-local PlayerPage, activatePlayer = createTab("Player", 5)
-local MapPage, activateMap = createTab("Map", 6)
-local ServerPage, activateServer = createTab("Server", 7)
-local SettingsPage, activateSettings = createTab("Settings", 8)
-local CreditsPage, activateCredits = createTab("Credits", 9)
+-- TABS (Essential Only: Movements, Visuals, Settings)
+local MovPage, activateMov = createTab("Movements", 1)
+local VisualsPage, activateVisuals = createTab("Visuals", 2)
+local SettingsPage, activateSettings = createTab("Settings", 3)
 
--- TAB: Movements (Exact Screenshot Configuration)
+-- TAB: Movements
 createInput(MovPage, "Speed", State.Speed, function(v)
     State.Speed = v
     State.SpeedEnabled = (v > 0)
@@ -1093,12 +1088,12 @@ createToggle(MovPage, "Mute Wind / Falling Sound", State.MuteWind, function(v)
     if v then scanAllSounds() end
 end)
 
--- TAB: Visuals (Main / Visuals)
-createToggle(MainPage, "Remove Darkness (Fullbright)", State.RemoveDarkness, function(v)
+-- TAB: Visuals
+createToggle(VisualsPage, "Remove Darkness (Fullbright)", State.RemoveDarkness, function(v)
     applyRemoveDarkness(v)
 end)
 
-createToggle(MainPage, "Unlock Camera Zoom (1M studs)", State.UnlockZoom, function(v)
+createToggle(VisualsPage, "Unlock Camera Zoom (1M studs)", State.UnlockZoom, function(v)
     applyUnlockZoom(v)
 end)
 
@@ -1324,60 +1319,7 @@ end)
 UnloadBtn.MouseButton1Click:Connect(killHub)
 UnloadBtn.Activated:Connect(killHub)
 
--- Home & Credits Info
-local WelcomeCard = Instance.new("Frame")
-WelcomeCard.Size = UDim2.new(0, 395, 0, 80)
-WelcomeCard.BackgroundColor3 = Theme.CardBg
-WelcomeCard.BorderSizePixel = 0
-WelcomeCard.Parent = HomePage
-
-local WCorner = Instance.new("UICorner")
-WCorner.CornerRadius = UDim.new(0, 6)
-WCorner.Parent = WelcomeCard
-
-local WTitle = Instance.new("TextLabel")
-WTitle.Text = "Welcome to Zerox Hub"
-WTitle.Font = Enum.Font.GothamBold
-WTitle.TextSize = 16
-WTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-WTitle.Position = UDim2.new(0, 14, 0, 12)
-WTitle.Size = UDim2.new(1, -28, 0, 20)
-WTitle.TextXAlignment = Enum.TextXAlignment.Left
-WTitle.BackgroundTransparency = 1
-WTitle.Parent = WelcomeCard
-
-local WSub = Instance.new("TextLabel")
-WSub.Text = "Target Game: Evade & Nextbots\nStatus: Undetected • All Engines Active"
-WSub.Font = Enum.Font.Gotham
-WSub.TextSize = 12
-WSub.TextColor3 = Theme.TextSecondary
-WSub.Position = UDim2.new(0, 14, 0, 36)
-WSub.Size = UDim2.new(1, -28, 0, 36)
-WSub.TextXAlignment = Enum.TextXAlignment.Left
-WSub.BackgroundTransparency = 1
-WSub.Parent = WelcomeCard
-
--- Credits
-local CredCard = Instance.new("Frame")
-CredCard.Size = UDim2.new(0, 395, 0, 70)
-CredCard.BackgroundColor3 = Theme.CardBg
-CredCard.BorderSizePixel = 0
-CredCard.Parent = CreditsPage
-
-local CrCorner = Instance.new("UICorner")
-CrCorner.CornerRadius = UDim.new(0, 6)
-CrCorner.Parent = CredCard
-
-local CrText = Instance.new("TextLabel")
-CrText.Text = "Zerox Hub v1.0\nDeveloped for Evade Community\nOriginal UI Concept: Rayfield / Obsidian"
-CrText.Font = Enum.Font.GothamMedium
-CrText.TextSize = 12
-CrText.TextColor3 = Color3.fromRGB(220, 220, 230)
-CrText.Size = UDim2.new(1, 0, 1, 0)
-CrText.BackgroundTransparency = 1
-CrText.Parent = CredCard
-
--- Default Tab: Movements (As requested in screenshot!)
+-- Default Tab: Movements (Selected by default)
 activateMov()
 
 -- Menu Toggle Keybind
