@@ -234,66 +234,223 @@ scanAllSounds()
 -- ========================================================
 -- 6. EVADE PHYSICS & MOVEMENT ENGINE
 -- ========================================================
+local EvadeTables = {}
+
+local function scanForEvadeTables()
+    local found = {}
+    
+    -- Method 1: getgc inspection (Standard across executors)
+    if getgc then
+        pcall(function()
+            local gc = getgc(true)
+            for _, v in pairs(gc) do
+                if type(v) == "table" then
+                    local s = rawget(v, "Speed") or rawget(v, "speed")
+                    local f = rawget(v, "Friction") or rawget(v, "friction")
+                    local a = rawget(v, "RunAccel") or rawget(v, "RunDeaccel") or rawget(v, "SprintCap")
+                    if (s and f) or (s and a) or (f and a) then
+                        table.insert(found, v)
+                    end
+                end
+            end
+        end)
+    end
+    
+    -- Method 2: Loaded module search
+    if getloadedmodules then
+        pcall(function()
+            for _, m in ipairs(getloadedmodules()) do
+                pcall(function()
+                    local t = require(m)
+                    if type(t) == "table" then
+                        if (rawget(t, "Speed") and rawget(t, "Friction")) or rawget(t, "RunAccel") or rawget(t, "SprintCap") then
+                            table.insert(found, t)
+                        end
+                    end
+                end)
+            end
+        end)
+    end
+    
+    -- Method 3: Search PlayerScripts, Character, and ReplicatedStorage
+    local searchRoots = {
+        LocalPlayer:FindFirstChild("PlayerScripts"),
+        LocalPlayer.Character,
+        game:GetService("ReplicatedStorage")
+    }
+    for _, rootObj in ipairs(searchRoots) do
+        if rootObj then
+            pcall(function()
+                for _, desc in ipairs(rootObj:GetDescendants()) do
+                    if desc:IsA("ModuleScript") then
+                        pcall(function()
+                            local t = require(desc)
+                            if type(t) == "table" then
+                                if (rawget(t, "Speed") and rawget(t, "Friction")) or rawget(t, "RunAccel") or rawget(t, "SprintCap") then
+                                    table.insert(found, t)
+                                end
+                            end
+                        end)
+                    end
+                end
+            end)
+        end
+    end
+    
+    return found
+end
+
+local function applyToEvadeTables()
+    if #EvadeTables == 0 then
+        EvadeTables = scanForEvadeTables()
+    end
+    
+    for _, tbl in ipairs(EvadeTables) do
+        pcall(function()
+            if table.isfrozen and table.isfrozen(tbl) and setreadonly then
+                setreadonly(tbl, false)
+            end
+            
+            -- Speed
+            if rawget(tbl, "Speed") ~= nil then tbl.Speed = State.Speed end
+            if rawget(tbl, "speed") ~= nil then tbl.speed = State.Speed end
+            
+            -- Friction
+            if rawget(tbl, "Friction") ~= nil then tbl.Friction = State.Friction end
+            if rawget(tbl, "friction") ~= nil then tbl.friction = State.Friction end
+            
+            -- Run Accel
+            if rawget(tbl, "RunAccel") ~= nil then tbl.RunAccel = State.RunAccel end
+            if rawget(tbl, "runAccel") ~= nil then tbl.runAccel = State.RunAccel end
+            if rawget(tbl, "RunAcceleration") ~= nil then tbl.RunAcceleration = State.RunAccel end
+            
+            -- Run Deaccel
+            if rawget(tbl, "RunDeaccel") ~= nil then tbl.RunDeaccel = State.RunDeaccel end
+            if rawget(tbl, "RunDeccel") ~= nil then tbl.RunDeccel = State.RunDeaccel end
+            if rawget(tbl, "runDeaccel") ~= nil then tbl.runDeaccel = State.RunDeaccel end
+            if rawget(tbl, "runDeccel") ~= nil then tbl.runDeccel = State.RunDeaccel end
+            if rawget(tbl, "Deaccel") ~= nil then tbl.Deaccel = State.RunDeaccel end
+            
+            -- Sprint Accel
+            if rawget(tbl, "SprintAccel") ~= nil then tbl.SprintAccel = State.SprintAccel end
+            if rawget(tbl, "sprintAccel") ~= nil then tbl.sprintAccel = State.SprintAccel end
+            if rawget(tbl, "SprintAcceleration") ~= nil then tbl.SprintAcceleration = State.SprintAccel end
+            
+            -- Sprint Cap
+            if rawget(tbl, "SprintCap") ~= nil then tbl.SprintCap = State.SprintCap end
+            if rawget(tbl, "sprintCap") ~= nil then tbl.sprintCap = State.SprintCap end
+            if rawget(tbl, "SprintSpeedCap") ~= nil then tbl.SprintSpeedCap = State.SprintCap end
+            
+            -- Jump Height
+            if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = State.JumpHeight end
+            if rawget(tbl, "jumpHeight") ~= nil then tbl.jumpHeight = State.JumpHeight end
+            
+            -- Jump Cap
+            if rawget(tbl, "JumpCap") ~= nil then tbl.JumpCap = State.JumpCap end
+            if rawget(tbl, "jumpCap") ~= nil then tbl.jumpCap = State.JumpCap end
+            
+            -- Jump Speed Multiplier
+            if rawget(tbl, "JumpSpeedMultiplier") ~= nil then tbl.JumpSpeedMultiplier = State.JumpSpeedMultiplier end
+            if rawget(tbl, "jumpSpeedMultiplier") ~= nil then tbl.jumpSpeedMultiplier = State.JumpSpeedMultiplier end
+        end)
+    end
+end
+
+-- Initialize scan immediately
+EvadeTables = scanForEvadeTables()
+applyToEvadeTables()
+
 local function syncEvadePhysics()
     local root = getRoot()
     local hum = getHumanoid()
     
     if root then
         pcall(function()
-            local frictionVal = math.clamp(State.Friction / 10, 0.05, 5)
+            local frictionVal = math.clamp(State.Friction / 10, 0.0, 5)
             root.CustomPhysicalProperties = PhysicalProperties.new(0.7, frictionVal, 0.5, 1, 1)
         end)
     end
     
     if hum then
         pcall(function()
-            hum.JumpHeight = math.clamp(State.JumpHeight * 2.5, 2, 50)
-            hum.JumpPower = math.clamp(State.JumpHeight * 16, 20, 100)
+            if State.JumpHeight ~= nil then
+                hum.JumpHeight = math.clamp(State.JumpHeight * 2.5, 0, 150)
+                hum.JumpPower = math.clamp(State.JumpHeight * 16, 0, 300)
+            end
         end)
     end
 end
 
--- Horizontal Velocity Engine
+local simulatedSpeed = 0
+local lastScanTick = 0
+
+-- Physics & Velocity Execution Loop
 table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
-    if State.SpeedEnabled then
-        local hum = getHumanoid()
-        local root = getRoot()
-        if hum and hum.Health > 0 and root then
-            -- Scale speed appropriately (treat 1500 as high speed velocity unit, max 150-180 studs/s)
-            local effectiveSpeed = math.clamp(State.Speed / 10, 16, 200)
-            hum.WalkSpeed = effectiveSpeed
-            
-            local moveDir = getMovementVector()
-            if moveDir then
-                -- Modify only horizontal plane (X and Z) to prevent super jump or sky launches
-                root.AssemblyLinearVelocity = Vector3.new(
-                    moveDir.X * effectiveSpeed,
-                    root.AssemblyLinearVelocity.Y,
-                    moveDir.Z * effectiveSpeed
-                )
+    if (tick() - lastScanTick) > 2 then
+        lastScanTick = tick()
+        if #EvadeTables == 0 then
+            EvadeTables = scanForEvadeTables()
+        end
+    end
+    
+    applyToEvadeTables()
+    
+    local hum = getHumanoid()
+    local root = getRoot()
+    if not hum or hum.Health <= 0 or not root then return end
+    
+    -- Sync jump height on humanoid
+    if State.JumpHeight ~= nil then
+        hum.JumpHeight = math.clamp(State.JumpHeight * 2.5, 0, 150)
+        hum.JumpPower = math.clamp(State.JumpHeight * 16, 0, 300)
+    end
+    
+    -- If Speed is set to 0, stop movement completely
+    if State.Speed <= 0 then
+        simulatedSpeed = 0
+        hum.WalkSpeed = 0
+        root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+        return
+    end
+    
+    -- Fallback / Direct Assist Physics Engine (When Evade internal table is not present)
+    if #EvadeTables == 0 and State.SpeedEnabled then
+        local moveDir = getMovementVector()
+        local isSprinting = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+        local mult = (State.JumpSpeedMultiplier and hum.FloorMaterial == Enum.Material.Air) and State.JumpSpeedMultiplier or 1.0
+        
+        local targetCap = isSprinting and (State.SprintCap or 2) or 1
+        local maxSpeed = (State.Speed / 60) * targetCap * mult
+        local accelRate = isSprinting and (State.SprintAccel * 50) or (State.RunAccel * 40)
+        local deaccelRate = (State.RunDeaccel / 10) * math.clamp(State.Friction / 5, 0.1, 5)
+        
+        if moveDir and moveDir.Magnitude > 0 then
+            simulatedSpeed = math.min(maxSpeed, simulatedSpeed + (accelRate * dt))
+            local vel = moveDir * simulatedSpeed
+            root.AssemblyLinearVelocity = Vector3.new(vel.X, root.AssemblyLinearVelocity.Y, vel.Z)
+            hum.WalkSpeed = math.max(1, simulatedSpeed)
+        else
+            simulatedSpeed = math.max(0, simulatedSpeed - (deaccelRate * dt))
+            if simulatedSpeed > 0 then
+                local currentFlat = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z)
+                if currentFlat.Magnitude > 0.1 then
+                    local dir = currentFlat.Unit
+                    local newFlat = dir * simulatedSpeed
+                    root.AssemblyLinearVelocity = Vector3.new(newFlat.X, root.AssemblyLinearVelocity.Y, newFlat.Z)
+                end
             end
+            hum.WalkSpeed = math.max(0, simulatedSpeed)
         end
     end
 end))
 
--- Ground CFrame Assistance
-table.insert(ActiveConnections, RunService.RenderStepped:Connect(function(dt)
-    if State.SpeedEnabled then
-        local hum = getHumanoid()
-        local root = getRoot()
-        if hum and hum.Health > 0 and root then
-            local moveDir = getMovementVector()
-            -- Only assist horizontal movement when on ground
-            if moveDir and hum.FloorMaterial ~= Enum.Material.Air then
-                local effectiveSpeed = math.clamp(State.Speed / 10, 16, 200)
-                local horizontalVel = Vector3.new(root.AssemblyLinearVelocity.X, 0, root.AssemblyLinearVelocity.Z).Magnitude
-                if horizontalVel < (effectiveSpeed * 0.75) then
-                    local flatDir = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
-                    root.CFrame = root.CFrame + (flatDir * (effectiveSpeed * dt))
-                end
-            end
-        end
-    end
+-- Re-hook on character respawn
+table.insert(ActiveConnections, LocalPlayer.CharacterAdded:Connect(function(char)
+    task.wait(0.3)
+    EvadeTables = scanForEvadeTables()
+    applyToEvadeTables()
+    syncEvadePhysics()
+    if State.MuteWind then scanAllSounds() end
 end))
 
 -- Natural Bunny Hop Engine (Strict Ground Detection - Zero Air-Walk)
@@ -784,6 +941,13 @@ local function createInput(parent, title, defaultValue, callback)
     TBox.ClearTextOnFocus = false
     TBox.Parent = BoxFrame
     
+    local function applyVal()
+        local num = tonumber(TBox.Text)
+        if num ~= nil then
+            callback(num)
+        end
+    end
+    
     TBox.Focused:Connect(function()
         TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Theme.CurrentAccent}):Play()
         TBox.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -792,10 +956,11 @@ local function createInput(parent, title, defaultValue, callback)
     TBox.FocusLost:Connect(function()
         TweenService:Create(BStroke, TweenInfo.new(0.15), {Color = Theme.InputBorder}):Play()
         TBox.TextColor3 = Theme.TextSecondary
-        local num = tonumber(TBox.Text)
-        if num then
-            callback(num)
-        end
+        applyVal()
+    end)
+    
+    TBox:GetPropertyChangedSignal("Text"):Connect(function()
+        applyVal()
     end)
     
     table.insert(AllSearchableItems, {Card = Card, Title = title})
@@ -910,41 +1075,50 @@ local CreditsPage, activateCredits = createTab("Credits", 9)
 -- TAB: Movements (Exact Screenshot Configuration)
 createInput(MovPage, "Speed", State.Speed, function(v)
     State.Speed = v
-    State.SpeedEnabled = true
+    State.SpeedEnabled = (v > 0)
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Friction", State.Friction, function(v)
     State.Friction = v
+    applyToEvadeTables()
     syncEvadePhysics()
 end)
 
 createInput(MovPage, "Run Accel", State.RunAccel, function(v)
     State.RunAccel = v
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Run Deaccel", State.RunDeaccel, function(v)
     State.RunDeaccel = v
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Sprint Accel", State.SprintAccel, function(v)
     State.SprintAccel = v
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Sprint Cap", State.SprintCap, function(v)
     State.SprintCap = v
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Jump Height", State.JumpHeight, function(v)
     State.JumpHeight = v
+    applyToEvadeTables()
     syncEvadePhysics()
 end)
 
 createInput(MovPage, "Jump Cap", State.JumpCap, function(v)
     State.JumpCap = v
+    applyToEvadeTables()
 end)
 
 createInput(MovPage, "Jump Speed Multiplier", State.JumpSpeedMultiplier, function(v)
     State.JumpSpeedMultiplier = v
+    applyToEvadeTables()
 end)
 
 createToggle(MovPage, "Bunny Hop (Bhop)", State.Bhop, function(v)
