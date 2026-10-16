@@ -142,7 +142,7 @@ local State = {
     RunDeaccel = 700,
     SprintAccel = 1,
     SprintCap = 2,
-    JumpHeight = 3,
+    JumpHeight = 1,
     JumpCap = 1,
     JumpSpeedMultiplier = 1,
     
@@ -300,9 +300,10 @@ local function applyToEvadeTables()
             if rawget(tbl, "sprintCap") ~= nil then tbl.sprintCap = State.SprintCap end
             if rawget(tbl, "SprintSpeedCap") ~= nil then tbl.SprintSpeedCap = State.SprintCap end
             
-            -- Jump Height
-            if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = State.JumpHeight end
-            if rawget(tbl, "jumpHeight") ~= nil then tbl.jumpHeight = State.JumpHeight end
+            -- Jump Height (Strictly keep 1 for normal jump unless user explicitly sets higher)
+            local jH = (State.JumpHeight and State.JumpHeight > 1) and State.JumpHeight or 1
+            if rawget(tbl, "JumpHeight") ~= nil then tbl.JumpHeight = jH end
+            if rawget(tbl, "jumpHeight") ~= nil then tbl.jumpHeight = jH end
             
             -- Jump Cap
             if rawget(tbl, "JumpCap") ~= nil then tbl.JumpCap = State.JumpCap end
@@ -334,9 +335,9 @@ local function syncEvadePhysics()
     
     if hum then
         pcall(function()
-            if State.JumpHeight ~= nil then
-                hum.JumpHeight = math.clamp(State.JumpHeight * 2.5, 0, 150)
-                hum.JumpPower = math.clamp(State.JumpHeight * 16, 0, 300)
+            if State.JumpHeight and State.JumpHeight > 1 then
+                hum.JumpHeight = math.clamp(State.JumpHeight * 7.2, 7.2, 100)
+                hum.JumpPower = math.clamp(State.JumpHeight * 50, 50, 200)
             end
         end)
     end
@@ -360,10 +361,13 @@ table.insert(ActiveConnections, RunService.Heartbeat:Connect(function(dt)
     local root = getRoot()
     if not hum or hum.Health <= 0 or not root then return end
     
-    -- Sync jump height on humanoid
-    if State.JumpHeight ~= nil then
-        hum.JumpHeight = math.clamp(State.JumpHeight * 2.5, 0, 150)
-        hum.JumpPower = math.clamp(State.JumpHeight * 16, 0, 300)
+    -- Enforce strictly normal jump height during Bhop (Stop super jump completely)
+    if State.Bhop and root.AssemblyLinearVelocity.Y > 22 then
+        root.AssemblyLinearVelocity = Vector3.new(
+            root.AssemblyLinearVelocity.X,
+            20,
+            root.AssemblyLinearVelocity.Z
+        )
     end
     
     -- If Speed is set to 0, stop movement completely
@@ -414,13 +418,14 @@ table.insert(ActiveConnections, LocalPlayer.CharacterAdded:Connect(function(char
     if State.MuteWind then scanAllSounds() end
 end))
 
--- Natural Bunny Hop Engine (Strict Ground Detection - Zero Air-Walk)
+-- Natural Bunny Hop Engine (Strict Ground Detection - Zero Air-Walk - Zero Super Jump)
 local lastBhopTick = 0
 local function isStrictlyGrounded(root, hum)
     if not hum or not root then return false end
     
-    if hum.FloorMaterial ~= Enum.Material.Air then
-        return true
+    -- If traveling upwards in the air, player cannot be grounded
+    if root.AssemblyLinearVelocity.Y > 0.5 then
+        return false
     end
     
     local state = hum:GetState()
@@ -428,20 +433,22 @@ local function isStrictlyGrounded(root, hum)
         return false
     end
     
-    if root.AssemblyLinearVelocity.Y <= 0.2 then
-        local hip = (hum.HipHeight and hum.HipHeight > 0) and hum.HipHeight or 2.0
-        local rootHalf = (root.Size and root.Size.Y > 0) and (root.Size.Y / 2) or 1.0
-        local soleDistance = hip + rootHalf + 0.35
-        
-        local params = RaycastParams.new()
-        params.FilterType = RaycastFilterType.Exclude
-        params.FilterDescendantsInstances = {getChar(), workspace.CurrentCamera}
-        params.IgnoreWater = true
-        
-        local res = workspace:Raycast(root.Position, Vector3.new(0, -soleDistance, 0), params)
-        if res and res.Instance and res.Instance.CanCollide and res.Instance.Transparency < 0.8 then
-            return true
-        end
+    if hum.FloorMaterial ~= Enum.Material.Air then
+        return true
+    end
+    
+    local hip = (hum.HipHeight and hum.HipHeight > 0) and hum.HipHeight or 2.0
+    local rootHalf = (root.Size and root.Size.Y > 0) and (root.Size.Y / 2) or 1.0
+    local soleDistance = hip + rootHalf + 0.35
+    
+    local params = RaycastParams.new()
+    params.FilterType = RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {getChar(), workspace.CurrentCamera}
+    params.IgnoreWater = true
+    
+    local res = workspace:Raycast(root.Position, Vector3.new(0, -soleDistance, 0), params)
+    if res and res.Instance and res.Instance.CanCollide and res.Instance.Transparency < 0.8 then
+        return true
     end
     
     return false
